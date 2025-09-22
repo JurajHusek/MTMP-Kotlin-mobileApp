@@ -3,6 +3,7 @@ package com.example.mtmp_kotlin_mobileapp
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,6 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -21,11 +26,13 @@ import co.yml.charts.ui.linechart.LineChart
 import co.yml.charts.ui.linechart.model.Line
 import co.yml.charts.ui.linechart.model.LineChartData
 import co.yml.charts.ui.linechart.model.LinePlotData
+import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.math.max
 import co.yml.charts.common.model.Point as ChartPoint
 
 
-enum class Screen { Home, Table, Graph }
+enum class Screen { Home, Table, Graph, Animation }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,22 +79,30 @@ fun AppRoot() {
     when (screen) {
         Screen.Home -> HomeScreen(
             onGoTable = { screen = Screen.Table },
-            onGoGraph = { screen = Screen.Graph}
+            onGoGraph = { screen = Screen.Graph},
+            onGoAnimation = { screen = Screen.Animation},
         )
         Screen.Table -> TableScreen(
             onGoHome = { screen = Screen.Home},
-            onGoGraph = { screen = Screen.Graph}
+            onGoGraph = { screen = Screen.Graph},
+            onGoAnimation = { screen = Screen.Animation}
         )
         Screen.Graph -> GraphScreen(
             onGoHome = { screen = Screen.Home},
-            onGoTable = { screen = Screen.Table}
+            onGoTable = { screen = Screen.Table},
+            onGoAnimation = { screen = Screen.Animation}
+        )
+        Screen.Animation -> AnimationScreen(
+            onGoHome = { screen = Screen.Home},
+            onGoTable = { screen = Screen.Table},
+            onGoGraph = { screen = Screen.Graph}
         )
     }
 }
 
 @Preview
 @Composable
-fun HomeScreen(onGoTable: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
+fun HomeScreen(onGoTable: () -> Unit = {}, onGoGraph: () -> Unit = {}, onGoAnimation: () -> Unit = {}) {
     var speedInput = remember { mutableStateOf("") }
     var angleInput = remember { mutableStateOf("") }
     var speed by remember { mutableStateOf(0.0) }
@@ -148,7 +163,7 @@ fun HomeScreen(onGoTable: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
                 Text("Graph")
             }
 
-            Button(onClick = { /* TODO */ }) {
+            Button(onClick = onGoAnimation, enabled = isComputed) {
                 Text("Animation")
             }
         }
@@ -156,7 +171,7 @@ fun HomeScreen(onGoTable: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
 }
 
 @Composable
-fun TableScreen(onGoHome: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
+fun TableScreen(onGoHome: () -> Unit = {}, onGoGraph: () -> Unit = {}, onGoAnimation: () -> Unit = {}) {
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(12.dp)) {
@@ -168,7 +183,6 @@ fun TableScreen(onGoHome: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
             Text("x [m]", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
             Text("y [m]", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
         }
-
         // Scrollovateľná tabuľka
         LazyColumn {
             items(points.size) { i ->
@@ -195,7 +209,7 @@ fun TableScreen(onGoHome: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
                 Text("Graph")
             }
 
-            Button(onClick = { /* TODO */ }) {
+            Button(onClick = onGoAnimation) {
                 Text("Animation")
             }
         }
@@ -203,7 +217,7 @@ fun TableScreen(onGoHome: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
 }
 
 @Composable
-fun GraphScreen(onGoHome: () -> Unit = {}, onGoTable: () -> Unit = {}) {
+fun GraphScreen(onGoHome: () -> Unit = {}, onGoTable: () -> Unit = {}, onGoAnimation: () -> Unit = {}) {
 
     val pointsData = points.mapIndexed { i, p -> ChartPoint(i.toFloat(), p.y.toFloat()) }
     val stepsX = points.size - 1
@@ -259,7 +273,80 @@ fun GraphScreen(onGoHome: () -> Unit = {}, onGoTable: () -> Unit = {}) {
         ) {
             Button(onClick = onGoHome) { Text("New simulation") }
             Button(onClick = onGoTable) { Text("Table") }
-            Button(onClick = { /* TODO: Animation */ }) { Text("Animation") }
+            Button(onClick = onGoAnimation) { Text("Animation") }
+        }
+    }
+}
+
+@Composable
+fun AnimationScreen(onGoHome: () -> Unit = {}, onGoTable: () -> Unit = {}, onGoGraph: () -> Unit = {}) {
+    var i by remember { mutableStateOf(0) }
+    var frac by remember { mutableStateOf(0f) }
+    LaunchedEffect(points) {
+        i = 0; frac = 0f
+        while (i < points.lastIndex) {
+            val dtMs = 500
+            var acc = 0L
+            val frame = 16L // ~60 FPS
+            while (acc < dtMs) {
+                delay(frame)
+                acc += frame
+                frac = (acc.toFloat() / dtMs.toFloat()).coerceIn(0f, 1f)
+            }
+            i++
+            frac = 0f
+        }
+        i = points.lastIndex - 1
+        frac = 1f
+    }
+
+    val maxX = points.maxOf { it.x }.coerceAtLeast(1.0)
+    val maxY = max(points.maxOf { it.y }, 1.0)
+    val pad = 24f
+    Column (
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .padding(12.dp)
+        ) {
+            val left = pad
+            val right = size.width - pad
+            val bottom = size.height - pad
+            val top = pad
+
+            val w = right - left
+            val h = bottom - top
+
+            fun mx(x: Double) = left + (x / maxX * w).toFloat()
+            fun my(y: Double) = bottom - (y / maxY * h).toFloat() // invert Y
+
+            drawLine(Color.LightGray, Offset(left, my(0.0)), Offset(right, my(0.0)), 2f)
+            for (k in 0 until points.lastIndex) {
+                val a = points[k];
+                val b = points[k + 1]
+                drawLine(Color.Gray, Offset(mx(a.x), my(a.y)), Offset(mx(b.x), my(b.y)), 2f)
+            }
+            val a = points[i]
+            val b = points[i + 1]
+            val xNow = a.x + (b.x - a.x) * frac
+            val yNow = a.y + (b.y - a.y) * frac
+
+            val cx = mx(xNow)
+            val cy = my(yNow)
+            drawCircle(color = Color.Red, radius = 15f, center = Offset(cx, cy))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(onClick = onGoHome) { Text("New simulation") }
+            Button(onClick = onGoTable) { Text("Table") }
+            Button(onClick = onGoGraph) { Text("Graph") }
         }
     }
 }
