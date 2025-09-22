@@ -14,8 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -26,7 +24,13 @@ import co.yml.charts.ui.linechart.LineChart
 import co.yml.charts.ui.linechart.model.Line
 import co.yml.charts.ui.linechart.model.LineChartData
 import co.yml.charts.ui.linechart.model.LinePlotData
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 import kotlin.math.max
 import co.yml.charts.common.model.Point as ChartPoint
@@ -50,6 +54,7 @@ class MainActivity : ComponentActivity() {
 data class Point(val x: Double, val y: Double, val time: Double)
 val points = mutableListOf<Point>()
 
+
 fun Compute(speed : Double, angle: Double, online: Boolean) {
     points.clear()
     if(online == false) {
@@ -69,8 +74,33 @@ fun Compute(speed : Double, angle: Double, online: Boolean) {
         println("Napočítaných bodov: ${points.size}")
         println("Prvý: ${points.first()}")
         println("Posledný: ${points.last()}")
+    } else {
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("http://10.0.2.2:8000/compute?speed=$speed&angle=$angle")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+
+                val response = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                val root = JSONObject(response)
+                val arr = root.getJSONArray("points")
+
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val x = obj.getDouble("x")
+                    val y = obj.getDouble("y")
+                    val t = obj.getDouble("time")
+                    points.add(Point(x, y, t))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }
+
 
 @Composable
 fun AppRoot() {
