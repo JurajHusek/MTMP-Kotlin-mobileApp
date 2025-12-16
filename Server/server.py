@@ -19,7 +19,7 @@ def compute(speed: float, angle: float):
         x = speed * t * cos(angle_rad)
         y = speed * t * sin(angle_rad) - 0.5 * 9.81 * t * t
         points.append({"x": x, "y": y, "time": t})
-        t += 0.5
+        t += 0.1
     points.append({"x": speed * impact_time * cos(angle_rad),
                    "y": 0.0,
                    "time": impact_time})
